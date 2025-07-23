@@ -42,11 +42,43 @@ def load_all_parsed(folder):
     else:
         return pd.DataFrame()
 
+# File uploader
+uploaded_file = st.file_uploader("Or upload a parsed CSV file to visualize:", type=["csv"])
+
+@st.cache_data
+def load_uploaded_csv(uploaded_file):
+    try:
+        df = pd.read_csv(uploaded_file, parse_dates=["start_time", "end_time"], dtype={"date": str, "hour": str})
+        # If date/hour columns missing, try to extract from filename
+        if 'date' not in df.columns or 'hour' not in df.columns:
+            date, hour = None, None
+            if hasattr(uploaded_file, 'name'):
+                fname = uploaded_file.name
+                import re
+                m = re.search(r'(\d{4})(\d{2})(\d{2})_(\d{2})', fname)
+                if m:
+                    date = f"{m.group(1)}-{m.group(2)}-{m.group(3)}"
+                    hour = m.group(4)
+            if 'date' not in df.columns:
+                df['date'] = date
+            if 'hour' not in df.columns:
+                df['hour'] = hour
+        return df
+    except Exception as e:
+        st.warning(f"Failed to load uploaded file: {e}")
+        return pd.DataFrame()
+
 try:
-    df = load_all_parsed(folder_path)
-    if df.empty:
-        st.warning("No parsed CSVs found in the folder.")
-        st.stop()
+    if uploaded_file is not None:
+        df = load_uploaded_csv(uploaded_file)
+        if df.empty:
+            st.warning("Uploaded file is empty or could not be loaded.")
+            st.stop()
+    else:
+        df = load_all_parsed(folder_path)
+        if df.empty:
+            st.warning("No parsed CSVs found in the folder.")
+            st.stop()
     # Sidebar filters
     st.sidebar.header("Filters")
     # Date filter
@@ -78,7 +110,7 @@ try:
 
     st.subheader("Duration Distribution")
     if not filtered_df.empty:
-        st.bar_chart(filtered_df["duration_ms"])
+        # st.bar_chart(filtered_df["duration_ms"])
         st.box_chart = st.box_plot = None
         try:
             import altair as alt
@@ -133,18 +165,7 @@ try:
     else:
         st.info("No data for time series chart.")
 
-    # ---
-    # 📦 5. Operation Heatmap by Unique ID
-    st.subheader("Operation Heatmap by Unique ID")
-    if not filtered_df.empty:
-        import seaborn as sns
-        import matplotlib.pyplot as plt
-        pivot = filtered_df.pivot_table(index="unique_id", columns="operation", values="duration_ms", aggfunc="count", fill_value=0)
-        fig, ax = plt.subplots(figsize=(12, 6))
-        sns.heatmap(pivot, cmap="Blues", ax=ax)
-        st.pyplot(fig)
-    else:
-        st.info("No data for heatmap.")
+    
 except Exception as e:
     st.error(f"Failed to load file: {e}")
     st.stop() 
